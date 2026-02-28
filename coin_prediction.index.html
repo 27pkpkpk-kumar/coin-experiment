@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Behavioral Experiment</title>
+    <!-- EmailJS SDK -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+    <style>
+        :root { --bg-color: #f4f6f8; --text-color: #333; --card-bg: #ffffff; --primary-color: #3b82f6; --secondary-color: #64748b; --success-color: #22c55e; --danger-color: #ef4444; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; overflow: hidden; user-select: none; }
+        .container { width: 100%; max-width: 800px; padding: 20px; }
+        .screen { display: none; flex-direction: column; align-items: center; background: var(--card-bg); padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); text-align: center; width: 100%; box-sizing: border-box; }
+        .active-screen { display: flex; }
+        h1 { margin-bottom: 20px; font-size: 2rem; } h2 { margin-bottom: 15px; font-size: 1.5rem; } p { margin-bottom: 20px; line-height: 1.6; color: #555; }
+        .form-group { margin-bottom: 15px; text-align: left; width: 100%; max-width: 400px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; } input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; box-sizing: border-box; }
+        .score-display { font-size: 1.5rem; font-weight: bold; color: var(--primary-color); }
+        .experiment-grid { display: grid; grid-template-columns: 1fr 1fr; width: 100%; gap: 20px; margin-bottom: 20px; }
+        .history-panel { text-align: left; font-family: monospace; font-size: 1.2rem; background: #f1f5f9; padding: 10px; border-radius: 6px; }
+        .history-panel h3 { margin: 0 0 5px 0; font-size: 0.9rem; color: var(--secondary-color); text-transform: uppercase; letter-spacing: 0.05em; }
+        .history-seq { letter-spacing: 5px; font-weight: bold; }
+        #coin-container { position: relative; width: 200px; height: 200px; margin: 20px 0; display: flex; justify-content: center; align-items: center; }
+        canvas { display: block; }
+        .btn-group { display: flex; gap: 20px; width: 100%; justify-content: center; }
+        .btn { border: none; padding: 20px 40px; font-size: 1.2rem; border-radius: 8px; cursor: pointer; transition: transform 0.1s; font-weight: bold; min-width: 180px; color: white; }
+        .btn:active { transform: scale(0.98); } .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-heads { background-color: #d97706; } .btn-tails { background-color: #475569; } .btn-primary { background-color: var(--primary-color); padding: 15px 50px; }
+        .timer-container { width: 100%; height: 12px; background-color: #e2e8f0; border-radius: 6px; overflow: hidden; margin-top: 20px; }
+        .timer-bar { height: 100%; background-color: var(--primary-color); width: 100%; transform-origin: left; }
+        .feedback { font-size: 1.2rem; font-weight: bold; height: 30px; margin-top: 10px; }
+        .correct { color: var(--success-color); } .incorrect { color: var(--danger-color); }
+        #status-message { margin-top: 30px; font-weight: bold; font-size: 1.2rem; padding: 20px; border-radius: 8px; }
+        .status-sending { color: var(--primary-color); } .status-success { background: #dcfce7; color: #15803d; border: 1px solid #15803d; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="demographics-screen" class="screen active-screen">
+        <h1>Participant Registration</h1>
+        <p>Please enter your details to begin.</p>
+        <div class="form-group"><label for="p-id">Participant Name or ID:</label><input type="text" id="p-id" placeholder="e.g., ID-101"></div>
+        <div class="form-group"><label for="p-age">Age:</label><input type="number" id="p-age" placeholder="e.g., 25" min="18" max="99"></div>
+        <div class="form-group"><label for="p-gender">Gender:</label><select id="p-gender"><option value="" disabled selected>Select Gender</option><option value="Male">Male</option><option value="Female">Female</option><option value="Non-binary">Non-binary</option><option value="Prefer not to say">Prefer not to say</option></select></div>
+        <button class="btn btn-primary" onclick="experiment.submitDemographics()">Next</button>
+    </div>
+
+    <div id="welcome-screen" class="screen">
+        <h1>Instructions</h1>
+        <div style="text-align: left; max-width: 600px;">
+            <ul><li>Total Rounds: <strong>50</strong></li><li>Predict <strong>Heads</strong> or <strong>Tails</strong>.</li><li>Time Limit: <strong>4 seconds</strong> per round.</li><li><strong>Scoring:</strong> Correct: <strong>+1.0</strong>, Incorrect: <strong>-0.5</strong>, Missed: <strong>0</strong></li></ul>
+        </div>
+        <button class="btn btn-primary" onclick="experiment.start()">Start Experiment</button>
+    </div>
+
+    <div id="experiment-screen" class="screen">
+        <div class="experiment-grid"><div style="text-align: left;"><span style="font-size: 1.2rem; font-weight: bold;">Round <span id="round-display">1</span> / 50</span></div><div style="text-align: right;"><span class="score-display">Score: <span id="score-display">0.0</span></span></div></div>
+        <div class="experiment-grid"><div class="history-panel"><h3>Coin History</h3><div id="coin-history" class="history-seq">- - - - -</div></div><div class="history-panel" style="text-align: right;"><h3>Your Picks</h3><div id="user-history" class="history-seq">- - - - -</div></div></div>
+        <div id="coin-container"><canvas id="coinCanvas" width="200" height="200"></canvas></div>
+        <div id="feedback-display" class="feedback">Make your prediction</div>
+        <div class="btn-group" id="btn-container"><button id="btn-heads" class="btn btn-heads" onclick="experiment.handlePrediction('H')">Predict HEADS</button><button id="btn-tails" class="btn btn-tails" onclick="experiment.handlePrediction('T')">Predict TAILS</button></div>
+        <div class="timer-container"><div id="timer-bar" class="timer-bar"></div></div>
+    </div>
+
+    <div id="end-screen" class="screen">
+        <h1>Experiment Complete</h1>
+        <div class="stat-box" style="margin-bottom: 20px;"><h2>Final Score: <span id="final-score">0</span></h2><p>Total Correct: <span id="total-correct">0</span> / 50</p></div>
+        <div id="status-message" class="status-sending">Finalizing data...</div>
+    </div>
+</div>
+
+<!-- ======================================================= -->
+<!--             CONFIGURATION AREA (EDIT THIS!)             -->
+<!-- ======================================================= -->
+<script>
+    // 1. Enter your Researcher Email (This is where data goes)
+    const RESEARCHER_EMAIL = "27pkpkpk@gmail.com"; 
+
+    // 2. Enter your EmailJS Keys (Keep the quote marks!)
+    const EMAIL_SERVICE_ID = "service_iopsowh";   
+    const EMAIL_TEMPLATE_ID = "template_0ykjool"; 
+    const EMAIL_PUBLIC_KEY = "zYCIm9bL3x7u35Iqe";   
+
+/* ======================================================= */
+/* DO NOT EDIT BELOW THIS LINE                 */
+/* ======================================================= */
+
+const SEQUENCE_STRING = "HTHHTTTHTHHHTTHTHHHTTTHHTHTTHHTHTHHTTHTHTTHHTHTTHT";
+const COIN_SEQUENCE = SEQUENCE_STRING.split('');
+
+class Experiment {
+    constructor() {
+        // Initialize EmailJS with your key
+        if(EMAIL_PUBLIC_KEY !== "YOUR_PUBLIC_KEY") {
+            emailjs.init(EMAIL_PUBLIC_KEY);
+        }
+
+        this.config = { totalRounds: 50, roundTimeMs: 4000, spinDurationMs: 1000, revealDurationMs: 1000 };
+        this.state = { currentRound: 0, score: 0, results: [], last5Coins: [], last5Preds: [], demographics: { id: '', age: '', gender: '' }, startTime: 0, timerId: null, isSpinning: false };
+        this.els = {
+            screens: { demo: document.getElementById('demographics-screen'), welcome: document.getElementById('welcome-screen'), experiment: document.getElementById('experiment-screen'), end: document.getElementById('end-screen') },
+            inputs: { id: document.getElementById('p-id'), age: document.getElementById('p-age'), gender: document.getElementById('p-gender') },
+            display: { round: document.getElementById('round-display'), score: document.getElementById('score-display'), coinHist: document.getElementById('coin-history'), userHist: document.getElementById('user-history'), feedback: document.getElementById('feedback-display'), timerBar: document.getElementById('timer-bar'), finalScore: document.getElementById('final-score'), totalCorrect: document.getElementById('total-correct'), status: document.getElementById('status-message') },
+            canvas: document.getElementById('coinCanvas'),
+            btns: { heads: document.getElementById('btn-heads'), tails: document.getElementById('btn-tails') }
+        };
+        this.ctx = this.els.canvas.getContext('2d');
+        this.frameUpdate = this.frameUpdate.bind(this);
+    }
+
+    switchScreen(name) { Object.values(this.els.screens).forEach(el => el.classList.remove('active-screen')); this.els.screens[name].classList.add('active-screen'); }
+
+    submitDemographics() {
+        const id = this.els.inputs.id.value.trim(); const age = this.els.inputs.age.value.trim(); const gender = this.els.inputs.gender.value;
+        if (!id || !age || !gender) { alert("Please fill in all fields."); return; }
+        this.state.demographics = { id, age, gender };
+        this.switchScreen('welcome');
+    }
+
+    start() { this.state.currentRound = 0; this.state.score = 0; this.state.results = []; this.switchScreen('experiment'); this.updateScoreUI(); this.startRound(); }
+
+    startRound() {
+        if (this.state.currentRound >= this.config.totalRounds) { this.endExperiment(); return; }
+        this.state.isSpinning = false; this.els.display.feedback.innerText = " "; this.els.display.feedback.className = "feedback"; this.enableButtons(true); this.updateScoreUI(); this.drawCoin('neutral', 1);
+        this.state.startTime = performance.now(); this.state.timerId = requestAnimationFrame(this.frameUpdate);
+    }
+
+    frameUpdate(timestamp) {
+        if (this.state.isSpinning) return;
+        const elapsed = timestamp - this.state.startTime;
+        const remaining = Math.max(0, this.config.roundTimeMs - elapsed);
+        const percent = (remaining / this.config.roundTimeMs) * 100;
+        this.els.display.timerBar.style.width = `${percent}%`;
+        this.els.display.timerBar.style.backgroundColor = percent < 25 ? 'var(--danger-color)' : 'var(--primary-color)';
+        if (remaining <= 0) { this.handleTimeout(); } else { this.state.timerId = requestAnimationFrame(this.frameUpdate); }
+    }
+
+    handlePrediction(choice) { cancelAnimationFrame(this.state.timerId); const rt = performance.now() - this.state.startTime; this.processRound(choice, rt); }
+    handleTimeout() { cancelAnimationFrame(this.state.timerId); this.processRound('None', 4000); }
+
+    processRound(prediction, rt) {
+        this.enableButtons(false); this.state.isSpinning = true;
+        const actualOutcome = COIN_SEQUENCE[this.state.currentRound];
+        let points = 0; let resultType = 'No Response';
+
+        if (prediction === 'None') { points = 0; resultType = 'Timeout'; this.els.display.feedback.innerText = "Time's Up!"; } 
+        else if (prediction === actualOutcome) { points = 1; resultType = 'Correct'; } 
+        else { points = -0.5; resultType = 'Incorrect'; }
+
+        this.state.score += points;
+        this.state.results.push({ round: this.state.currentRound + 1, actual: actualOutcome, prediction: prediction, result: resultType, rt: Math.round(rt), running_score: this.state.score });
+
+        this.animateCoinFlip(actualOutcome, () => {
+            if (resultType === 'Correct') { this.els.display.feedback.innerText = `Correct! It was ${actualOutcome === 'H' ? 'Heads' : 'Tails'}`; this.els.display.feedback.classList.add('correct'); } 
+            else if (resultType === 'Incorrect') { this.els.display.feedback.innerText = `Incorrect. It was ${actualOutcome === 'H' ? 'Heads' : 'Tails'}`; this.els.display.feedback.classList.add('incorrect'); }
+            this.state.last5Coins.push(actualOutcome); this.state.last5Preds.push(prediction !== 'None' ? prediction : 'X');
+            setTimeout(() => { this.state.currentRound++; this.startRound(); }, this.config.revealDurationMs);
+        });
+    }
+
+    updateScoreUI() { this.els.display.score.innerText = this.state.score.toFixed(1); this.els.display.round.innerText = this.state.currentRound + 1; this.els.display.coinHist.innerText = this.padHistory(this.state.last5Coins); this.els.display.userHist.innerText = this.padHistory(this.state.last5Preds); }
+    padHistory(arr) { const displayArr = []; for (let i = 0; i < 5; i++) { const val = arr[arr.length - 5 + i]; displayArr.push(val ? val : '-'); } return displayArr.join(' '); }
+
+    animateCoinFlip(outcome, callback) {
+        const start = performance.now(); const duration = this.config.spinDurationMs;
+        const animate = (time) => {
+            const progress = (time - start) / duration;
+            if (progress < 1) { const angle = progress * Math.PI * 6; const scaleX = Math.cos(angle); const type = scaleX > 0 ? 'neutral' : 'neutral'; this.drawCoin(type, Math.abs(scaleX)); requestAnimationFrame(animate); } 
+            else { this.drawCoin(outcome, 1); callback(); }
+        };
+        requestAnimationFrame(animate);
+    }
+
+    drawCoin(type, scaleX) {
+        const ctx = this.ctx; const w = this.els.canvas.width; const h = this.els.canvas.height; const cx = w / 2; const cy = h / 2; const r = 80;
+        ctx.clearRect(0, 0, w, h); ctx.save(); ctx.translate(cx, cy); ctx.scale(scaleX, 1);
+        let color1, color2, text;
+        if (type === 'H') { color1 = '#FFD700'; color2 = '#B8860B'; text = 'HEADS'; } else if (type === 'T') { color1 = '#E0E0E0'; color2 = '#757575'; text = 'TAILS'; } else { color1 = '#F0E68C'; color2 = '#DAA520'; text = ''; }
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); const grad = ctx.createLinearGradient(-r, -r, r, r); grad.addColorStop(0, color1); grad.addColorStop(1, color2); ctx.fillStyle = grad; ctx.fill(); ctx.lineWidth = 5; ctx.strokeStyle = color2; ctx.stroke();
+        if (text) { ctx.fillStyle = '#FFFFFF'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, 0, 0); }
+        ctx.restore();
+    }
+
+    enableButtons(enabled) { this.els.btns.heads.disabled = !enabled; this.els.btns.tails.disabled = !enabled; }
+
+    endExperiment() {
+        this.switchScreen('end');
+        this.els.display.finalScore.innerText = this.state.score.toFixed(1);
+        const correctCount = this.state.results.filter(r => r.result === 'Correct').length;
+        this.els.display.totalCorrect.innerText = correctCount;
+
+        const csvHeader = "Round,Actual,Prediction,Result,RT_ms,Score\n";
+        const csvRows = this.state.results.map(r => `${r.round},${r.actual},${r.prediction},${r.result},${r.rt},${r.running_score}`).join("\n");
+        const fullCSV = csvHeader + csvRows;
+
+        // PREPARE DATA FOR EMAILJS
+        const templateParams = {
+            to_email: RESEARCHER_EMAIL, // This sends your email to EmailJS
+            participant_id: this.state.demographics.id,
+            demographics_summary: `${this.state.demographics.age} years old, ${this.state.demographics.gender}`,
+            final_score: this.state.score.toFixed(1),
+            experiment_data: fullCSV
+        };
+
+        if (EMAIL_PUBLIC_KEY === "YOUR_PUBLIC_KEY") { alert("Developer Warning: EmailJS keys are not set in the code."); return; }
+
+        this.els.display.status.innerText = "Saving data...";
+        
+        emailjs.send(EMAIL_SERVICE_ID, EMAIL_TEMPLATE_ID, templateParams)
+            .then(() => {
+                const el = this.els.display.status; el.innerText = "Data Sent Successfully. Thank you for participating."; el.className = 'status-success'; el.classList.remove('status-sending');
+            }, (error) => {
+                console.error("Email Error:", JSON.stringify(error));
+                this.els.display.status.innerText = "Data Upload Failed. Please contact researcher.";
+                this.els.display.status.classList.add('status-error');
+            });
+    }
+}
+
+const experiment = new Experiment();
+</script>
+</body>
+</html>
